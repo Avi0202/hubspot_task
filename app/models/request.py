@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel,Field
 from typing import Optional
 
 class CompanySearchRequest(BaseModel):
@@ -9,3 +9,9 @@ class CreateCompanyRequest(BaseModel):
     domain: Optional[str] = None
     phone: Optional[str] = None
     address: Optional[str] = None
+
+class LocationRequest(BaseModel):
+    zipcode: str
+    
+class DecodeVinRequest(BaseModel):
+    vin: str = Field(..., description="17-character Vehicle Identification Number to decode")

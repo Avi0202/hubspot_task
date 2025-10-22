@@ -1,12 +1,13 @@
-
 from fastapi import APIRouter, HTTPException
 import httpx, json
-from app.core.config import settings  
+from app.core.config import settings
+from app.models.request import DecodeVinRequest
+from app.models.response import DecodeVinResponse
 
-vin_router = APIRouter()
+vin_router = APIRouter(prefix="/vin", tags=["Vehicle"])
 
-@vin_router.post("/decode_vin")
-async def decode_vin(vin: str):
+@vin_router.post("/details", response_model=DecodeVinResponse)
+async def decode_vin(request: DecodeVinRequest):
     url = settings.VIN_API_URL
     headers = {
         "Authorization": f"Bearer {settings.VIN_API}",
@@ -14,7 +15,7 @@ async def decode_vin(vin: str):
     }
     payload = {
         "session_id": "1761024240367",
-        "message": vin,
+        "message": request.vin,
         "agent_id": "68d64fb8a2356c3108a44e44"
     }
 
@@ -30,23 +31,18 @@ async def decode_vin(vin: str):
         raise HTTPException(status_code=response.status_code, detail="VIN API request failed")
 
     data = response.json()
-    
+
     try:
         inner = json.loads(data["text"])
     except Exception:
         raise HTTPException(status_code=500, detail="Invalid inner JSON structure")
 
-    try:
-        # handle cases where the VIN lookup failed (like "status": "error")
-        if inner.get("status") != "success":
-            raise HTTPException(status_code=400, detail=inner.get("error_message", "VIN lookup failed"))
+    if inner.get("status") != "success":
+        raise HTTPException(status_code=400, detail=inner.get("error_message", "VIN lookup failed"))
 
-        vehicle = inner["vehicle"]
+    vehicle = inner["vehicle"]
 
-        return {
-            "Vehicle": f"{vehicle['year']} {vehicle['make']} {vehicle['model']}",
-            "Type": vehicle.get("body_style", "Unknown")
-        }
-
-    except KeyError as ex:
-        raise HTTPException(status_code=500, detail=f"Unexpected response structure: missing {ex}")
+    return DecodeVinResponse(
+        Vehicle=f"{vehicle['year']} {vehicle['make']} {vehicle['model']}",
+        Type=vehicle.get("body_style", "Unknown")
+    )

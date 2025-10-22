@@ -20,3 +20,13 @@ class CompanyDetailsResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+    
+class LocationResponse(BaseModel):
+    zip: str
+    city: Optional[str]
+    state: Optional[str]
+    state_abbr: Optional[str]
+
+class DecodeVinResponse(BaseModel):
+    Vehicle: str
+    Type: Optional[str] = "Unknown"
