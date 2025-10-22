@@ -1,10 +1,18 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from app.core.config import settings
 from app.core.logger import get_logger
+from app.models.request import CompanySearchRequest, CreateCompanyRequest
+from app.models.response import (
+    CompanyResponse,
+    CompanyListResponse,
+    CompanyDetailsResponse,
+    MessageResponse,
+)
 import httpx
 
 hub_router = APIRouter(prefix="/hubspot", tags=["HubSpot"])
 logger = get_logger("hubspot_router")
+
 HUBSPOT_BASE_URL = settings.HUBSPOT_BASE_URL
 HUBSPOT_TOKEN = settings.HUBSPOT_TOKEN
 
@@ -28,77 +36,47 @@ async def hubspot_request(method: str, endpoint: str, params=None, json=None):
         return response.json()
 
 
-async def search_company_by_name(company_name: str):
-    endpoint = "/crm/v3/objects/companies/search"
-    payload = {
-        "filterGroups": [
-            {
-                "filters": [
-                    {"propertyName": "name", "operator": "EQ", "value": company_name}
-                ]
-            }
-        ],
-        "properties": ["name", "domain", "phone"],
-    }
-    data = await hubspot_request("POST", endpoint, json=payload)
-    if data.get("results"):
-        return data["results"][0]
-    return None
-
-@hub_router.get("/companies")
-async def get_all_companies(limit: int = 10):
-    """
-    Fetch a list of companies from HubSpot.
-    Limit defaults to 10, but you can override it with ?limit=20, etc.
-    """
-    endpoint = "/crm/v3/objects/companies"
-
-    # HubSpot allows pagination — 'after' param can also be used if you want to fetch next pages
-    params = {
-        "limit": limit,
-        "properties": "name,domain,phone,address"
-    }
-    logger.info(f"Fetching up to {limit} companies from HubSpot")
-    data = await hubspot_request("GET", endpoint, params=params)
-
-    # Only return relevant fields for easier readability
-    companies = [
-        {
-            "id": company["id"],
-            "name": company["properties"].get("name"),
-            "domain": company["properties"].get("domain"),
-            "phone": company["properties"].get("phone"),
-            
-        }
-        for company in data.get("results", [])
-    ]
-
-    return {
-        "count": len(companies),
-        "companies": companies
-    }
-
-
-
-async def create_company_helper(company_data: dict):
-    """
-    Shared helper — creates a new company in HubSpot.
-    Accepts a dict of company fields.
-    """
+# Helper to create a company ---------------------------------------------------
+async def create_company_helper(company_data: dict) -> CompanyResponse:
     endpoint = "/crm/v3/objects/companies"
     payload = {"properties": company_data}
-
     data = await hubspot_request("POST", endpoint, json=payload)
 
     props = data.get("properties", {})
-    return {
-        "id": data.get("id"),
-        "name": props.get("name"),
-        "domain": props.get("domain"),
-        "phone": props.get("phone"),
-        "address": props.get("address"),
-    }
-@hub_router.get("/company/details")
+    return CompanyResponse(
+        id=data.get("id"),
+        name=props.get("name"),
+        domain=props.get("domain"),
+        phone=props.get("phone"),
+        address=props.get("address"),
+    )
+
+
+# Route: get all companies -----------------------------------------------------
+@hub_router.get("/companies", response_model=CompanyListResponse)
+async def get_all_companies(limit: int = Query(10, ge=1, le=100)):
+    endpoint = "/crm/v3/objects/companies"
+    params = {"limit": limit, "properties": "name,domain,phone,address"}
+
+    logger.info(f"Fetching up to {limit} companies from HubSpot")
+    data = await hubspot_request("GET", endpoint, params=params)
+
+    companies = [
+        CompanyResponse(
+            id=company["id"],
+            name=company["properties"].get("name"),
+            domain=company["properties"].get("domain"),
+            phone=company["properties"].get("phone"),
+            address=company["properties"].get("address"),
+        )
+        for company in data.get("results", [])
+    ]
+
+    return CompanyListResponse(count=len(companies), companies=companies)
+
+
+# Route: get company details ---------------------------------------------------
+@hub_router.get("/company/details", response_model=CompanyDetailsResponse)
 async def get_company_details(company_name: str):
     endpoint = "/crm/v3/objects/companies/search"
     payload = {
@@ -108,27 +86,25 @@ async def get_company_details(company_name: str):
                     {
                         "propertyName": "name",
                         "operator": "CONTAINS_TOKEN",
-                        "value": company_name
+                        "value": company_name,
                     }
                 ]
             }
         ],
-        "properties": ["name", "domain", "phone"]
+        "properties": ["name", "domain", "phone", "address"],
     }
     data = await hubspot_request("POST", endpoint, json=payload)
 
     if not data.get("results"):
         logger.info(f"No results found for company name: {company_name}")
-        logger.info(f"Adding new company to HubSpot: {company_name}")
         await create_company_helper({"name": company_name})
         logger.info(f"Company '{company_name}' added successfully.")
-        return {"message": f"No results found for '{company_name}', added new company."}
+        return MessageResponse(message=f"No results found for '{company_name}', added new company.")
 
     props = data["results"][0]["properties"]
-
-    # return a clean JSON object
-    return {
-        "name": props.get("name"),
-        "domain": props.get("domain"),
-        "phone": props.get("phone")
-    }
+    return CompanyDetailsResponse(
+        name=props.get("name"),
+        domain=props.get("domain"),
+        phone=props.get("phone"),
+        address=props.get("address"),
+    )
