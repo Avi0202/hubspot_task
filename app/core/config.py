@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     VIN_API_URL: str = "https://admin-apis.isometrik.io/v1/agent/chat/strands/"
     VIN_API: str
     ZIPPO_BASE_URL: str = "https://api.zippopotam.us/us"
+    OPENROUTESERVICE_API_KEY: str
 
     class Config:
         env_file = ".env"
