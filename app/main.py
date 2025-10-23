@@ -6,6 +6,7 @@ from app.routes.quote_router import quote_router
 from contextlib import asynccontextmanager
 from app.core.logger import get_logger
 from app.core.middleware import log_requests
+from fastapi.middleware.cors import CORSMiddleware
 
 logger = get_logger(__name__)
 
@@ -20,6 +21,13 @@ async def lifespan(app: FastAPI):
     logger.info(" Application shutdown initiated")
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.middleware("http")(log_requests)
 app.include_router(hub_router)
 app.include_router(vin_router)
