@@ -5,6 +5,7 @@ from app.models.email_request import EmailRequest
 from app.models.email_response import EmailResponse
 from app.services.distance_service import get_distance_miles
 from app.core.logger import get_logger
+from app.services.hubspot_service import create_transport_deal
 import random
 
 quote_router = APIRouter(prefix="/quote", tags=["Quote"])
@@ -18,7 +19,24 @@ async def generate_quote(payload: QuoteRequest):
     calculates distance between ZIP codes, 
     and returns pricing & dummy route history.
     """
-    logger.info(f"callingg distance service for {payload.pickup.zip} to {payload.delivery.zip}")
+    logger.info("Calling transport deal creation in HubSpot")
+
+# Build a flat dict exactly like your incoming JSON
+    deal_data = {
+        "company_name": getattr(payload, "company_name", "Individual Customer"),
+        "contact_name": payload.contact_name,
+        "email": payload.email,
+        "phone": payload.phone,
+        "vehicles": [v.dict() for v in payload.vehicles],
+        "pickup": payload.pickup.dict(),
+        "delivery": payload.delivery.dict()
+    }
+    
+    # Create HubSpot records
+    hubspot_response = await create_transport_deal(deal_data)
+    logger.info(f"HubSpot deal created: {hubspot_response}")
+
+    logger.info(f"calling distance service for {payload.pickup.zip} to {payload.delivery.zip}")
     try:
         # Step 1: Calculate distance
         distance_miles = await get_distance_miles(
@@ -56,13 +74,19 @@ async def generate_quote(payload: QuoteRequest):
 
         # Step 4: Return response
         return QuoteResponse(
-            distance_miles=distance_miles,
-            super_dispatch_price=super_dispatch_price,
-            internal_ai_price=internal_ai_price,
-            markup_percentage=markup_percentage,
-            final_quote_amount=final_quote_amount,
-            route_history=route_history
-        )
+             origin=f"{payload.pickup.city}, {payload.pickup.state}, {payload.pickup.zip}",
+             destination=f"{payload.delivery.city}, {payload.delivery.state}, {payload.delivery.zip}",
+             distance_miles=distance_miles,
+             super_dispatch_price=super_dispatch_price,
+             internal_ai_price=internal_ai_price,
+             markup_percentage=markup_percentage,
+             final_quote_amount=final_quote_amount,
+             route_history=route_history,
+             # ➕ include IDs from HubSpot
+             company_id=hubspot_response.get("company_id"),
+             contact_id=hubspot_response.get("contact_id"),
+             deal_id=hubspot_response.get("deal_id")
+         )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
