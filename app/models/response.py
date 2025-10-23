@@ -28,5 +28,7 @@ class LocationResponse(BaseModel):
     state_abbr: Optional[str]
 
 class DecodeVinResponse(BaseModel):
-    Vehicle: str
-    Type: Optional[str] = "Unknown"
+    year: Optional[int]
+    make: Optional[str]
+    model: Optional[str]
+    type: Optional[str] = "Unknown"
