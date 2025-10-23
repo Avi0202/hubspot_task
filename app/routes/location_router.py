@@ -2,10 +2,13 @@ from fastapi import APIRouter, HTTPException
 import httpx
 from app.core.config import settings
 from app.models.response import LocationResponse
+from app.core.logger import get_logger
 
 location_router = APIRouter(prefix="/location", tags=["Location"])
 
 ZIPPO_BASE_URL = settings.ZIPPO_BASE_URL
+
+logger = get_logger(__name__)
 
 
 @location_router.get("/{zipcode}", response_model=LocationResponse)
@@ -14,6 +17,7 @@ async def get_location(zipcode: str):
     Return city and state for a given ZIP code.
     """
     url = f"{ZIPPO_BASE_URL}/{zipcode}"
+    logger.info(f"Fetching location data for ZIP code: {zipcode}")
 
     async with httpx.AsyncClient() as client:
         response = await client.get(url)

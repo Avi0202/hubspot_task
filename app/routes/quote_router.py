@@ -4,9 +4,12 @@ from app.models.quote_response import QuoteResponse, RouteHistory
 from app.models.email_request import EmailRequest
 from app.models.email_response import EmailResponse
 from app.services.distance_service import get_distance_miles
+from app.core.logger import get_logger
 import random
 
 quote_router = APIRouter(prefix="/quote", tags=["Quote"])
+
+logger = get_logger(__name__)
 
 @quote_router.post("/generate", response_model=QuoteResponse)
 async def generate_quote(payload: QuoteRequest):
@@ -15,6 +18,7 @@ async def generate_quote(payload: QuoteRequest):
     calculates distance between ZIP codes, 
     and returns pricing & dummy route history.
     """
+    logger.info(f"callingg distance service for {payload.pickup.zip} to {payload.delivery.zip}")
     try:
         # Step 1: Calculate distance
         distance_miles = await get_distance_miles(

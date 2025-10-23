@@ -1,10 +1,13 @@
 from fastapi import APIRouter, HTTPException
 import httpx, json
 from app.core.config import settings
+from app.core.logger import get_logger
 from app.models.request import DecodeVinRequest
 from app.models.response import DecodeVinResponse
 
 vin_router = APIRouter(prefix="/vin", tags=["Vehicle"])
+
+logger = get_logger(__name__)
 
 @vin_router.post("/details", response_model=DecodeVinResponse)
 async def decode_vin(request: DecodeVinRequest):
@@ -20,6 +23,7 @@ async def decode_vin(request: DecodeVinRequest):
     }
 
     # Make API call
+    logger.info(f"Making API call to VIN service for VIN: {request.vin}")
     try:
         async with httpx.AsyncClient(timeout=300.0) as client:
             response = await client.post(url, headers=headers, json=payload)
