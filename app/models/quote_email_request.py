@@ -6,4 +6,5 @@ class QuoteEmailRequest(BaseModel):
     deal_id: str
     email_subject: str
     email_body: str
+    distance_miles: float
     quote_amount: float

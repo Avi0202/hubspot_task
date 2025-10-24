@@ -50,7 +50,7 @@ async def generate_quote(payload: QuoteRequest):
         super_dispatch_price = round(distance_miles * 1.0, 2)  # $1/mi dummy logic
         internal_ai_price = round(super_dispatch_price * random.uniform(0.95, 1.05), 2)
         markup_percentage = 12
-        final_quote_amount = round(super_dispatch_price * (1 + markup_percentage / 100), 2)
+        quote_amount = round(super_dispatch_price * (1 + markup_percentage / 100), 2)
 
         # Step 3: Dummy Similar Route History
         route_history = [
@@ -82,7 +82,7 @@ async def generate_quote(payload: QuoteRequest):
              super_dispatch_price=super_dispatch_price,
              internal_ai_price=internal_ai_price,
              markup_percentage=markup_percentage,
-             final_quote_amount=final_quote_amount,
+             quote_amount=f"{quote_amount:,.2f}",
              route_history=route_history,
              # ➕ include IDs from HubSpot
              company_id=hubspot_response.get("company_id"),

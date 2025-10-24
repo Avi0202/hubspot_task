@@ -16,7 +16,7 @@ class QuoteResponse(BaseModel):
     distance_miles: float
     super_dispatch_price: float
     internal_ai_price: float
-    final_quote_amount: float
+    quote_amount: float
     markup_percentage: float
     route_history: List[RouteHistory]
 
