@@ -20,7 +20,12 @@ class QuoteRequest(BaseModel):
     contact_name: str
     email: EmailStr
     phone: str
-    billing_address: Optional[str] = None
+    address_line1: Optional[str] = None
+    address_line2: Optional[str] = None
+    zip_code: str
+    country: str
+    state: str
+    city: str
     vehicles: List[Vehicle]
     pickup: Location
     delivery: Location

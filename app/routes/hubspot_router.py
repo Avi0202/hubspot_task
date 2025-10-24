@@ -24,6 +24,10 @@ async def company_details(company_name: str):
     Fetch details for a specific company name.
     If not found, auto-create a company.
     """
+    if not company_name.strip():
+        logger.warning("Empty company_name in request, skipping HubSpot call.")
+        return CompanyDetailsResponse(name=None, domain=None, phone=None, address=None)
+
     results = await get_company_details(company_name)
 
     if not results:

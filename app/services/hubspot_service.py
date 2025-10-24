@@ -77,6 +77,10 @@ async def get_all_companies(limit: int = 10):
     ]
 
 async def get_company_details(company_name: str):
+    company_name = (company_name or "").strip()
+    if not company_name or len(company_name) < 3:
+        logger.warning(f"Skipping HubSpot search for invalid company name: '{company_name}'")
+        return []
     endpoint = "/companies/search"
     payload = {
         "filterGroups": [{
@@ -95,45 +99,17 @@ async def get_company_details(company_name: str):
 # create_transport_deal – main async HubSpot integration
 # -------------------------------------------------------------------
 import aiohttp
-
 async def create_transport_deal(data: dict):
     """
-    Creates or reuses HubSpot company, contact, and deal entities,
+    Creates or reuses HubSpot contact and deal entities,
     associates them together, and returns their IDs.
-    Handles 409 conflicts (already exists) and logs useful info.
     """
-
     async with aiohttp.ClientSession(headers=HEADERS) as session:
-        # ------------------------------------------------------------------
-        # 1️⃣ Create or reuse Company
-        # ------------------------------------------------------------------
-        company_name = data.get("company_name", "Individual Customer")
-        company_payload = {"properties": {"name": company_name}}
-        company_id = None
-
-        async with session.post(f"{HUBSPOT_BASE_URL}/companies", json=company_payload) as res:
-            company_text = await res.text()
-            logger.info(f"Company response: {res.status} {company_text}")
-
-            try:
-                company_json = await res.json()
-            except Exception:
-                company_json = {}
-
-            # handle both success and duplicate (409)
-            if res.status in (200, 201):
-                company_id = company_json.get("id")
-            elif res.status == 409:
-                # HubSpot sends detail about existing ID inside the message
-                msg = company_json.get("message", "")
-                if "Existing ID:" in msg:
-                    company_id = msg.split("Existing ID:")[-1].strip()
-                logger.info(f"Company already exists. Using existing ID: {company_id}")
-            else:
-                logger.warning(f"Company creation failed: {company_text}")
+        # ✅ company is now passed in from get_or_create_company logic
+        company_id = data.get("company_id")
 
         # ------------------------------------------------------------------
-        # 2️⃣ Create or reuse Contact
+        # 1️⃣ Create or reuse Contact
         # ------------------------------------------------------------------
         contact_payload = {
             "properties": {
@@ -164,7 +140,7 @@ async def create_transport_deal(data: dict):
                 logger.warning(f"Contact creation failed: {contact_text}")
 
         # ------------------------------------------------------------------
-        # 3️⃣ Create Deal
+        # 2️⃣ Create Deal
         # ------------------------------------------------------------------
         pickup = data.get("pickup", {}) or {}
         delivery = data.get("delivery", {}) or {}
@@ -199,22 +175,22 @@ async def create_transport_deal(data: dict):
                 logger.warning(f"Deal creation failed: {deal_text}")
 
         # ------------------------------------------------------------------
-        # 4️⃣ Create Associations (only if IDs exist)
+        # 3️⃣ Create Associations
         # ------------------------------------------------------------------
         if deal_id and company_id:
             await session.put(
                 f"https://api.hubapi.com/crm/v4/associations/deals/companies/{deal_id}/{company_id}"
             )
-            logger.info(f"Associated Deal {deal_id}  with  Company {company_id}")
+            logger.info(f"Associated Deal {deal_id} with Company {company_id}")
 
         if deal_id and contact_id:
             await session.put(
                 f"https://api.hubapi.com/crm/v4/associations/deals/contacts/{deal_id}/{contact_id}"
             )
-            logger.info(f"Associated Deal {deal_id}  with  Contact {contact_id}")
+            logger.info(f"Associated Deal {deal_id} with Contact {contact_id}")
 
         # ------------------------------------------------------------------
-        # 5️⃣ Return all IDs for the API response
+        # Return IDs
         # ------------------------------------------------------------------
         logger.info(
             f"HubSpot IDs => Company: {company_id}, Contact: {contact_id}, Deal: {deal_id}"

@@ -16,36 +16,30 @@ logger = get_logger(__name__)
 
 @quote_router.post("/generate", response_model=QuoteResponse)
 async def generate_quote(payload: QuoteRequest):
-    """
-    Accepts pickup/delivery info and vehicles, 
-    calculates distance between ZIP codes, 
-    and returns pricing & dummy route history.
-    """
-    # Build a flat dict exactly like your incoming JSON
     deal_data = {
-        "company_name": getattr(payload, "company_name", "Individual Customer"),
+        "company_name": getattr(payload, "company_name", "").strip() or "Individual Customer",
         "contact_name": payload.contact_name,
         "email": payload.email,
         "phone": payload.phone,
         "vehicles": [v.dict() for v in payload.vehicles],
         "pickup": payload.pickup.dict(),
-        "delivery": payload.delivery.dict()
+        "delivery": payload.delivery.dict(),
+        "billing_address": getattr(payload, "billing_address", None)
     }
-    
+
     company_name = deal_data.get("company_name")
     phone = deal_data.get("phone")
     address = deal_data.get("billing_address")
 
-    # 1️⃣ Ensure the company exists (create if missing)
+    # ✅ ensure company exists and attach ID
     company = await get_or_create_company(company_name, phone, address)
     company_id = company["id"]
-    
+    deal_data["company_id"] = company_id  # ✅ pass company id forward
+
     logger.info("Calling transport deal creation in HubSpot")
 
-# 
-    
-    # Create HubSpot records
     hubspot_response = await create_transport_deal(deal_data)
+    ...
     logger.info(f"HubSpot deal created: {hubspot_response}")
 
     logger.info(f"calling distance service for {payload.pickup.zip} to {payload.delivery.zip}")
