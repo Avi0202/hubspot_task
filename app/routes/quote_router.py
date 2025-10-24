@@ -29,7 +29,15 @@ async def generate_quote(payload: QuoteRequest):
 
     company_name = deal_data.get("company_name")
     phone = deal_data.get("phone")
-    address = deal_data.get("billing_address")
+    
+    address = {
+    "address_line1": payload.address_line1,
+    "address_line2": payload.address_line2,
+    "city": payload.city,
+    "state": payload.state,
+    "zip_code": payload.zip_code,
+    "country": payload.country,
+}
 
     # ✅ ensure company exists and attach ID
     company = await get_or_create_company(company_name, phone, address)
@@ -89,6 +97,7 @@ async def generate_quote(payload: QuoteRequest):
              quote_amount=quote_amount,
              route_history=route_history,
              # ➕ include IDs from HubSpot
+             vehicles=[v.dict() for v in payload.vehicles],
              company_id=hubspot_response.get("company_id"),
              contact_id=hubspot_response.get("contact_id"),
              deal_id=hubspot_response.get("deal_id")

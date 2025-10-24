@@ -14,6 +14,8 @@ class Location(BaseModel):
     city: str
     state: str
     zip: str = Field(..., min_length=5, max_length=10)
+    date: Optional[str] = None
+    
 
 class QuoteRequest(BaseModel):
     company_name: str
@@ -28,4 +30,6 @@ class QuoteRequest(BaseModel):
     city: str
     vehicles: List[Vehicle]
     pickup: Location
+     # ISO format date
     delivery: Location
+     # ISO format date

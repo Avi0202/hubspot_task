@@ -35,13 +35,10 @@ async def hubspot_request(method: str, endpoint: str, params=None, json=None):
 # -------------------------------------------------------------------
 # Company utilities (unchanged)
 # -------------------------------------------------------------------
-async def get_or_create_company(company_name: str, phone: str, address: str):
-    """
-    Find an existing company by name in HubSpot, or create it if it doesn't exist.
-    """
+async def get_or_create_company(company_name: str, phone: str, address: dict):
     logger.info(f"Checking if company '{company_name}' exists in HubSpot")
 
-    existing_company = await hubspot_find_company_by_name(company_name)  # Implement this separately
+    existing_company = await hubspot_find_company_by_name(company_name)
     if existing_company:
         logger.info(f"Found existing company: {existing_company['id']}")
         return existing_company
@@ -52,11 +49,17 @@ async def get_or_create_company(company_name: str, phone: str, address: str):
         "properties": {
             "name": company_name,
             "phone": phone,
-            "address": address
+            "address": address.get("address_line1", ""),
+            "address2": address.get("address_line2", ""),
+            "city": address.get("city", ""),
+            "state": address.get("state", ""),
+            "zip": address.get("zip_code", ""),
+            "country": address.get("country", "")
         }
     }
 
-    new_company = await hubspot_create_company(new_company_payload)  # Implement this separately
+    logger.info(f"New company payload sent to HubSpot: {new_company_payload}")
+    new_company = await hubspot_create_company(new_company_payload)
     logger.info(f"Created company '{company_name}' with ID: {new_company['id']}")
     return new_company
 
@@ -105,7 +108,7 @@ async def create_transport_deal(data: dict):
     associates them together, and returns their IDs.
     """
     async with aiohttp.ClientSession(headers=HEADERS) as session:
-        # ✅ company is now passed in from get_or_create_company logic
+        # company is now passed in from get_or_create_company logic
         company_id = data.get("company_id")
 
         # ------------------------------------------------------------------
@@ -175,19 +178,29 @@ async def create_transport_deal(data: dict):
                 logger.warning(f"Deal creation failed: {deal_text}")
 
         # ------------------------------------------------------------------
-        # 3️⃣ Create Associations
+        # 3️⃣ Create Associations (fixed v4 endpoints)
         # ------------------------------------------------------------------
         if deal_id and company_id:
-            await session.put(
-                f"https://api.hubapi.com/crm/v4/associations/deals/companies/{deal_id}/{company_id}"
-            )
-            logger.info(f"Associated Deal {deal_id} with Company {company_id}")
+            assoc_url = "https://api.hubapi.com/crm/v4/associations/deals/companies/batch/create"
+            payload = {
+                "inputs": [
+                    {"from": {"id": deal_id}, "to": {"id": company_id}, "type": "deal_to_company"}
+                ]
+            }
+            async with session.post(assoc_url, json=payload) as res:
+                assoc_text = await res.text()
+                logger.info(f"Deal->Company assoc: {res.status} {assoc_text}")
 
         if deal_id and contact_id:
-            await session.put(
-                f"https://api.hubapi.com/crm/v4/associations/deals/contacts/{deal_id}/{contact_id}"
-            )
-            logger.info(f"Associated Deal {deal_id} with Contact {contact_id}")
+            assoc_url = "https://api.hubapi.com/crm/v4/associations/deals/contacts/batch/create"
+            payload = {
+                "inputs": [
+                    {"from": {"id": deal_id}, "to": {"id": contact_id}, "type": "deal_to_contact"}
+                ]
+            }
+            async with session.post(assoc_url, json=payload) as res:
+                assoc_text = await res.text()
+                logger.info(f"Deal->Contact assoc: {res.status} {assoc_text}")
 
         # ------------------------------------------------------------------
         # Return IDs
