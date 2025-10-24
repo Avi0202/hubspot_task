@@ -24,7 +24,7 @@ async def generate_quote(payload: QuoteRequest):
         "vehicles": [v.dict() for v in payload.vehicles],
         "pickup": payload.pickup.dict(),
         "delivery": payload.delivery.dict(),
-        "billing_address": getattr(payload, "billing_address", None)
+        # "billing_address": getattr(payload, "billing_address", None)
     }
 
     company_name = deal_data.get("company_name")
