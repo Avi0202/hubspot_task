@@ -102,18 +102,30 @@ async def get_company_details(company_name: str):
 # create_transport_deal – main async HubSpot integration
 # -------------------------------------------------------------------
 import aiohttp
+
+from fastapi import HTTPException
+from app.core.logger import get_logger
+
+logger = get_logger("hubspot_service")
+
+HUBSPOT_BASE_URL = "https://api.hubapi.com/crm/v3/objects"
+HEADERS = {
+    "Authorization": f"Bearer {HUBSPOT_TOKEN}",
+    "Content-Type": "application/json"
+}
+
+
 async def create_transport_deal(data: dict):
     """
-    Creates or reuses HubSpot contact and deal entities,
-    associates them together, and returns their IDs.
+    Creates or reuses HubSpot contact, company, and deal entities,
+    associates them together (bi-directional), and returns their IDs.
     """
     async with aiohttp.ClientSession(headers=HEADERS) as session:
-        # company is now passed in from get_or_create_company logic
         company_id = data.get("company_id")
 
-        # ------------------------------------------------------------------
+        # --------------------------------------------------------------
         # 1️⃣ Create or reuse Contact
-        # ------------------------------------------------------------------
+        # --------------------------------------------------------------
         contact_payload = {
             "properties": {
                 "firstname": data.get("contact_name"),
@@ -124,96 +136,98 @@ async def create_transport_deal(data: dict):
         contact_id = None
 
         async with session.post(f"{HUBSPOT_BASE_URL}/contacts", json=contact_payload) as res:
-            contact_text = await res.text()
-            logger.info(f"Contact response: {res.status} {contact_text}")
-
+            text = await res.text()
+            logger.info(f"Contact response: {res.status} {text}")
             try:
-                contact_json = await res.json()
+                body = await res.json()
             except Exception:
-                contact_json = {}
+                body = {}
 
             if res.status in (200, 201):
-                contact_id = contact_json.get("id")
+                contact_id = body.get("id")
             elif res.status == 409:
-                msg = contact_json.get("message", "")
+                msg = body.get("message", "")
                 if "Existing ID:" in msg:
                     contact_id = msg.split("Existing ID:")[-1].strip()
-                logger.info(f"Contact already exists. Using existing ID: {contact_id}")
+                logger.info(f"Contact already exists: {contact_id}")
             else:
-                logger.warning(f"Contact creation failed: {contact_text}")
+                raise HTTPException(status_code=res.status, detail=text)
 
-        # ------------------------------------------------------------------
+        # --------------------------------------------------------------
         # 2️⃣ Create Deal
-        # ------------------------------------------------------------------
+        # --------------------------------------------------------------
         pickup = data.get("pickup", {}) or {}
         delivery = data.get("delivery", {}) or {}
+        vehicles = data.get("vehicles", []) or []
+
+        # 🔧 Compose deal name dynamically
+        if vehicles:
+            vehicle_names = [f"{v.get('year', '')} {v.get('make', '')} {v.get('model', '')}".strip() for v in vehicles]
+            if len(vehicle_names) == 1:
+                vehicle_str = vehicle_names[0]
+            else:
+                vehicle_str = ", ".join(vehicle_names[:-1]) + f" and {vehicle_names[-1]}"
+            deal_name = f"{data.get('contact_name')} Quote for {vehicle_str}"
+        else:
+            deal_name = f"{data.get('contact_name')} Quote"
 
         deal_payload = {
             "properties": {
-                "dealname": f"{data.get('contact_name')} Quote",
+                "dealname": deal_name,
                 "pickup_city": pickup.get("city", ""),
                 "delivery_city": delivery.get("city", ""),
-                "vehicles_json": str(data.get("vehicles", []))
+                "vehicles_json": str(vehicles)
             }
         }
 
         deal_id = None
         async with session.post(f"{HUBSPOT_BASE_URL}/deals", json=deal_payload) as res:
-            deal_text = await res.text()
-            logger.info(f"Deal response: {res.status} {deal_text}")
-
+            text = await res.text()
+            logger.info(f"Deal response: {res.status} {text}")
             try:
-                deal_json = await res.json()
+                body = await res.json()
             except Exception:
-                deal_json = {}
+                body = {}
 
             if res.status in (200, 201):
-                deal_id = deal_json.get("id")
+                deal_id = body.get("id")
             elif res.status == 409:
-                msg = deal_json.get("message", "")
+                msg = body.get("message", "")
                 if "Existing ID:" in msg:
                     deal_id = msg.split("Existing ID:")[-1].strip()
-                logger.info(f"Deal already exists. Using existing ID: {deal_id}")
+                logger.info(f"Deal already exists: {deal_id}")
             else:
-                logger.warning(f"Deal creation failed: {deal_text}")
+                raise HTTPException(status_code=res.status, detail=text)
 
-        # ------------------------------------------------------------------
-        # 3️⃣ Create Associations (fixed v4 endpoints)
-        # ------------------------------------------------------------------
+        # --------------------------------------------------------------
+        # 3️⃣ Create ASSOCIATIONS (bi‑directional)
+        # --------------------------------------------------------------
+        async def associate(from_type, to_type, from_id, to_id, assoc_type):
+            url = f"https://api.hubapi.com/crm/v3/associations/{from_type}/{to_type}/batch/create"
+            payload = {"inputs": [{"from": {"id": from_id}, "to": {"id": to_id}, "type": assoc_type}]}
+            async with session.post(url, json=payload) as res:
+                logger.info(f"Assoc {from_type}->{to_type} ({assoc_type}): {res.status} {await res.text()}")
+
+        # Deal ↔ Company
         if deal_id and company_id:
-            assoc_url = "https://api.hubapi.com/crm/v4/associations/deals/companies/batch/create"
-            payload = {
-                "inputs": [
-                    {"from": {"id": deal_id}, "to": {"id": company_id}, "type": "deal_to_company"}
-                ]
-            }
-            async with session.post(assoc_url, json=payload) as res:
-                assoc_text = await res.text()
-                logger.info(f"Deal->Company assoc: {res.status} {assoc_text}")
+            await associate("deals", "companies", deal_id, company_id, "deal_to_company")
+            await associate("companies", "deals", company_id, deal_id, "company_to_deal")
 
+        # Deal ↔ Contact
         if deal_id and contact_id:
-            assoc_url = "https://api.hubapi.com/crm/v4/associations/deals/contacts/batch/create"
-            payload = {
-                "inputs": [
-                    {"from": {"id": deal_id}, "to": {"id": contact_id}, "type": "deal_to_contact"}
-                ]
-            }
-            async with session.post(assoc_url, json=payload) as res:
-                assoc_text = await res.text()
-                logger.info(f"Deal->Contact assoc: {res.status} {assoc_text}")
+            await associate("deals", "contacts", deal_id, contact_id, "deal_to_contact")
+            await associate("contacts", "deals", contact_id, deal_id, "contact_to_deal")
 
-        # ------------------------------------------------------------------
-        # Return IDs
-        # ------------------------------------------------------------------
-        logger.info(
-            f"HubSpot IDs => Company: {company_id}, Contact: {contact_id}, Deal: {deal_id}"
-        )
+        # Company ↔ Contact
+        if company_id and contact_id:
+            await associate("companies", "contacts", company_id, contact_id, "company_to_contact")
+            await associate("contacts", "companies", contact_id, company_id, "contact_to_company")
 
-        return {
-            "company_id": company_id,
-            "contact_id": contact_id,
-            "deal_id": deal_id,
-        }
+        # --------------------------------------------------------------
+        # 4️⃣ Return IDs
+        # --------------------------------------------------------------
+        logger.info(f"HubSpot IDs → Company: {company_id}, Contact: {contact_id}, Deal: {deal_id}")
+        return {"company_id": company_id, "contact_id": contact_id, "deal_id": deal_id}
 
 from datetime import datetime, timezone
 import aiohttp
@@ -221,10 +235,13 @@ import aiohttp
 async def send_quote_email(data: dict):
     """
     Updates the deal with distance & quote amount,
-    creates an EMAIL engagement, then associates it to the deal/contact/company.
+    creates an EMAIL engagement, and associates it
+    bidirectionally with the deal.
     """
     async with aiohttp.ClientSession(headers=HEADERS) as session:
-        # 1. Update deal custom properties
+        # ---------------------------------------------------------
+        # 1️⃣ Update deal custom properties
+        # ---------------------------------------------------------
         deal_payload = {
             "properties": {
                 "distance_miles": data["distance_miles"],
@@ -239,54 +256,51 @@ async def send_quote_email(data: dict):
             deal_text = await res.text()
             logger.info(f"Deal update response: {res.status} {deal_text}")
 
-        # 2. Create EMAIL engagement (no associations here)
+        # ---------------------------------------------------------
+        # 2️⃣ Create EMAIL engagement
+        # ---------------------------------------------------------
         hs_timestamp = int(datetime.now(timezone.utc).timestamp() * 1000)
-
         email_props = {
             "hs_email_direction": "EMAIL",
             "hs_email_subject": data["email_subject"],
             "hs_email_text": data["email_body"],
-            "hs_timestamp": hs_timestamp
+            "hs_timestamp": hs_timestamp,
         }
 
         async with session.post(
             "https://api.hubapi.com/crm/v3/objects/emails",
             json={"properties": email_props},
         ) as res:
-            email_create_text = await res.text()
-            logger.info(f"Email create response: {res.status} {email_create_text}")
-
-            email_json = {}
+            create_text = await res.text()
+            logger.info(f"Email create response: {res.status} {create_text}")
             try:
                 email_json = await res.json()
             except Exception:
-                pass
-
+                email_json = {}
             email_id = email_json.get("id")
 
-        # 3. Associate email with deal, contact, and company using v4 associations
-        async def assoc(from_type: str, to_type: str, from_id: str, to_id: str, assoc_type: str):
-            url = (
-                f"https://api.hubapi.com/crm/v4/associations/"
-                f"{from_type}/{to_type}/batch/create"
-            )
-            payload = {
-                "inputs": [
-                    {"from": {"id": from_id}, "to": {"id": to_id}, "type": assoc_type}
-                ]
-            }
+        # ---------------------------------------------------------
+        # 3️⃣ Bidirectional association: Email ↔ Deal
+        # ---------------------------------------------------------
+        async def associate(from_type, to_type, from_id, to_id, assoc_type):
+            url = f"https://api.hubapi.com/crm/v3/associations/{from_type}/{to_type}/batch/create"
+            payload = {"inputs": [{"from": {"id": from_id}, "to": {"id": to_id}, "type": assoc_type}]}
             async with session.post(url, json=payload) as r:
-                logger.info(
-                    f"Assoc {from_type}->{to_type} ({assoc_type}) response: "
-                    f"{r.status} {await r.text()}"
-                )
+                text = await r.text()
+                logger.info(f"Assoc {from_type}->{to_type} ({assoc_type}): {r.status} {text}")
 
         if email_id:
-            await assoc("emails", "deals", email_id, data["deal_id"], "email_to_deal")
-            await assoc("emails", "contacts", email_id, data["contact_id"], "email_to_contact")
-            if data.get("company_id"):
-                await assoc("emails", "companies", email_id, data["company_id"], "email_to_company")
+            # Email → Deal
+            await associate("emails", "deals", email_id, data["deal_id"], "email_to_deal")
+            # Deal → Email
+            await associate("deals", "emails", data["deal_id"], email_id, "deal_to_email")
+        else:
+            logger.warning("No email_id returned; skipping associations.")
 
+        # ---------------------------------------------------------
+        # 4️⃣ Return IDs
+        # ---------------------------------------------------------
+        logger.info(f"HubSpot email↔deal association complete: Email {email_id}, Deal {data['deal_id']}")
         return {"deal_id": data["deal_id"], "email_id": email_id}
     
 
