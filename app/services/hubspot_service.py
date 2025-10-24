@@ -35,19 +35,30 @@ async def hubspot_request(method: str, endpoint: str, params=None, json=None):
 # -------------------------------------------------------------------
 # Company utilities (unchanged)
 # -------------------------------------------------------------------
-async def create_company(company_data: dict) -> CompanyResponse:
-    endpoint = "/companies"
-    payload = {"properties": company_data}
-    data = await hubspot_request("POST", endpoint, json=payload)
-    props = data.get("properties", {})
-    logger.info(f"Created company: {props.get('name')}")
-    return CompanyResponse(
-        id=data.get("id"),
-        name=props.get("name"),
-        domain=props.get("domain"),
-        phone=props.get("phone"),
-        address=props.get("address")
-    )
+async def get_or_create_company(company_name: str, phone: str, address: str):
+    """
+    Find an existing company by name in HubSpot, or create it if it doesn't exist.
+    """
+    logger.info(f"Checking if company '{company_name}' exists in HubSpot")
+
+    existing_company = await hubspot_find_company_by_name(company_name)  # Implement this separately
+    if existing_company:
+        logger.info(f"Found existing company: {existing_company['id']}")
+        return existing_company
+
+    logger.info(f"Company '{company_name}' not found. Creating new company in HubSpot.")
+
+    new_company_payload = {
+        "properties": {
+            "name": company_name,
+            "phone": phone,
+            "address": address
+        }
+    }
+
+    new_company = await hubspot_create_company(new_company_payload)  # Implement this separately
+    logger.info(f"Created company '{company_name}' with ID: {new_company['id']}")
+    return new_company
 
 async def get_all_companies(limit: int = 10):
     endpoint = "/companies"
@@ -288,3 +299,39 @@ async def send_quote_email(data: dict):
                 await assoc("emails", "companies", email_id, data["company_id"], "email_to_company")
 
         return {"deal_id": data["deal_id"], "email_id": email_id}
+    
+
+async def hubspot_find_company_by_name(company_name: str):
+    """
+    Search HubSpot for a company by name.
+    Returns the first matching record or None if not found.
+    """
+    url = "https://api.hubapi.com/crm/v3/objects/companies/search"
+    headers = {"Authorization": f"Bearer {HUBSPOT_TOKEN}"}
+    payload = {
+        "filterGroups": [{
+            "filters": [{
+                "propertyName": "name",
+                "operator": "EQ",
+                "value": company_name
+            }]
+        }]
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, headers=headers, json=payload) as resp:
+            data = await resp.json()
+            results = data.get("results", [])
+            return results[0] if results else None
+
+
+async def hubspot_create_company(company_payload: dict):
+    """
+    Creates a new HubSpot company.
+    """
+    url = "https://api.hubapi.com/crm/v3/objects/companies"
+    headers = {"Authorization": f"Bearer {HUBSPOT_TOKEN}"}
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, headers=headers, json=company_payload) as resp:
+            return await resp.json()

@@ -26,6 +26,7 @@ class LocationResponse(BaseModel):
     city: Optional[str]
     state: Optional[str]
     state_abbr: Optional[str]
+    country: Optional[str]
 
 class DecodeVinResponse(BaseModel):
     year: Optional[int]

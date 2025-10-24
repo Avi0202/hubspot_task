@@ -5,7 +5,7 @@ from app.models.email_request import EmailRequest
 from app.models.email_response import EmailResponse
 from app.services.distance_service import get_distance_miles
 from app.core.logger import get_logger
-from app.services.hubspot_service import create_transport_deal
+from app.services.hubspot_service import create_transport_deal,get_or_create_company
 from app.models.quote_email_request import QuoteEmailRequest
 from app.services.hubspot_service import send_quote_email
 import random
@@ -21,9 +21,7 @@ async def generate_quote(payload: QuoteRequest):
     calculates distance between ZIP codes, 
     and returns pricing & dummy route history.
     """
-    logger.info("Calling transport deal creation in HubSpot")
-
-# Build a flat dict exactly like your incoming JSON
+    # Build a flat dict exactly like your incoming JSON
     deal_data = {
         "company_name": getattr(payload, "company_name", "Individual Customer"),
         "contact_name": payload.contact_name,
@@ -33,6 +31,18 @@ async def generate_quote(payload: QuoteRequest):
         "pickup": payload.pickup.dict(),
         "delivery": payload.delivery.dict()
     }
+    
+    company_name = deal_data.get("company_name")
+    phone = deal_data.get("phone")
+    address = deal_data.get("billing_address")
+
+    # 1️⃣ Ensure the company exists (create if missing)
+    company = await get_or_create_company(company_name, phone, address)
+    company_id = company["id"]
+    
+    logger.info("Calling transport deal creation in HubSpot")
+
+# 
     
     # Create HubSpot records
     hubspot_response = await create_transport_deal(deal_data)

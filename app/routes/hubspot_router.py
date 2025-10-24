@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query
 from app.models.response import CompanyListResponse, CompanyDetailsResponse, MessageResponse, CompanyResponse
-from app.services.hubspot_service import get_all_companies, get_company_details, create_company
+from app.services.hubspot_service import get_all_companies, get_company_details
 from app.core.logger import get_logger
 
 from typing import cast
@@ -27,8 +27,13 @@ async def company_details(company_name: str):
     results = await get_company_details(company_name)
 
     if not results:
-        logger.info(f"No results found, creating company {company_name}")
-        return cast(CompanyDetailsResponse, await create_company({"name": company_name}))
+        logger.info(f"No results found")
+        return {
+            "name": None,
+            "domain": None,
+            "phone": None,
+            "address": None
+        }
 
     props = results[0]["properties"]
     return CompanyDetailsResponse(

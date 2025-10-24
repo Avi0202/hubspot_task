@@ -33,4 +33,5 @@ async def get_location(zipcode: str):
         city=place.get("place name"),
         state=place.get("state"),
         state_abbr=place.get("state abbreviation"),
+        country=data.get("country")
     )
