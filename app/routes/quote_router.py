@@ -82,7 +82,7 @@ async def generate_quote(payload: QuoteRequest):
              super_dispatch_price=super_dispatch_price,
              internal_ai_price=internal_ai_price,
              markup_percentage=markup_percentage,
-             quote_amount=f"{quote_amount:,.2f}",
+             quote_amount=quote_amount,
              route_history=route_history,
              # ➕ include IDs from HubSpot
              company_id=hubspot_response.get("company_id"),
@@ -132,10 +132,6 @@ async def generate_email(payload: EmailRequest):
 
 @quote_router.post("/send-quote-email")
 async def send_quote_email_route(payload: QuoteEmailRequest):
-    """
-    Takes the deal/contact/company IDs, AI‑generated email,
-    and quote amount, creates the quote record, and logs/sends the email.
-    """
     logger.info(f"Sending quote email for deal {payload.deal_id}")
     result = await send_quote_email(payload.dict())
-    return {"status": "Email logged", "quote_id": result.get("quote_id")}
+    return {"status": "Email logged", "email_id": result.get("email_id")}

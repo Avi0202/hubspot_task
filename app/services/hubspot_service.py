@@ -194,13 +194,13 @@ async def create_transport_deal(data: dict):
             await session.put(
                 f"https://api.hubapi.com/crm/v4/associations/deals/companies/{deal_id}/{company_id}"
             )
-            logger.info(f"Associated Deal {deal_id} ↔ Company {company_id}")
+            logger.info(f"Associated Deal {deal_id}  with  Company {company_id}")
 
         if deal_id and contact_id:
             await session.put(
                 f"https://api.hubapi.com/crm/v4/associations/deals/contacts/{deal_id}/{contact_id}"
             )
-            logger.info(f"Associated Deal {deal_id} ↔ Contact {contact_id}")
+            logger.info(f"Associated Deal {deal_id}  with  Contact {contact_id}")
 
         # ------------------------------------------------------------------
         # 5️⃣ Return all IDs for the API response
@@ -215,59 +215,76 @@ async def create_transport_deal(data: dict):
             "deal_id": deal_id,
         }
 
+from datetime import datetime, timezone
+import aiohttp
+
 async def send_quote_email(data: dict):
     """
-    Creates a quote object and logs/sends the email via HubSpot.
+    Updates the deal with distance & quote amount,
+    creates an EMAIL engagement, then associates it to the deal/contact/company.
     """
     async with aiohttp.ClientSession(headers=HEADERS) as session:
-        # 1️⃣ create quote (native "quotes" object)
-        quote_payload = {
+        # 1. Update deal custom properties
+        deal_payload = {
             "properties": {
-                "hs_title": f"Quote for deal {data['deal_id']}",
-                "hs_quote_amount": data["quote_amount"]
-            },
-            "associations": [
-                {
-                    "to": {"id": data["deal_id"]},
-                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 65}]
-                },
-                {
-                    "to": {"id": data["contact_id"]},
-                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 3}]
-                }
-            ]
+                "distance_miles": data["distance_miles"],
+                "quote_amount": data["quote_amount"]
+            }
         }
-        async with session.post(f"{HUBSPOT_BASE_URL}/quotes", json=quote_payload) as res:
-            quote_text = await res.text()
-            logger.info(f"Quote create response: {res.status} {quote_text}")
-            quote_json = {}
+
+        async with session.patch(
+            f"{HUBSPOT_BASE_URL}/deals/{data['deal_id']}",
+            json=deal_payload,
+        ) as res:
+            deal_text = await res.text()
+            logger.info(f"Deal update response: {res.status} {deal_text}")
+
+        # 2. Create EMAIL engagement (no associations here)
+        hs_timestamp = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+        email_props = {
+            "hs_email_direction": "EMAIL",
+            "hs_email_subject": data["email_subject"],
+            "hs_email_text": data["email_body"],
+            "hs_timestamp": hs_timestamp
+        }
+
+        async with session.post(
+            "https://api.hubapi.com/crm/v3/objects/emails",
+            json={"properties": email_props},
+        ) as res:
+            email_create_text = await res.text()
+            logger.info(f"Email create response: {res.status} {email_create_text}")
+
+            email_json = {}
             try:
-                quote_json = await res.json()
+                email_json = await res.json()
             except Exception:
                 pass
-            quote_id = quote_json.get("id")
 
-        # 2️⃣ log email engagement under  deal/contact/company
-        email_payload = {
-            "properties": {
-                "hs_email_direction": "OUTGOING",
-                "hs_email_subject": data["email_subject"],
-                "hs_email_text": data["email_body"]
-            },
-            "associations": [
-                {
-                    "to": {"id": data["deal_id"]},
-                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 65}]
-                },
-                {
-                    "to": {"id": data["contact_id"]},
-                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 3}]
-                }
-            ]
-        }
+            email_id = email_json.get("id")
 
-        async with session.post("https://api.hubapi.com/crm/v3/objects/emails", json=email_payload) as res:
-            email_text = await res.text()
-            logger.info(f"Email log response: {res.status} {email_text}")
+        # 3. Associate email with deal, contact, and company using v4 associations
+        async def assoc(from_type: str, to_type: str, from_id: str, to_id: str, assoc_type: str):
+            url = (
+                f"https://api.hubapi.com/crm/v4/associations/"
+                f"{from_type}/{to_type}/batch/create"
+            )
+            payload = {
+                "inputs": [
+                    {"from": {"id": from_id}, "to": {"id": to_id}, "type": assoc_type}
+                ]
+            }
+            async with session.post(url, json=payload) as r:
+                logger.info(
+                    f"Assoc {from_type}->{to_type} ({assoc_type}) response: "
+                    f"{r.status} {await r.text()}"
+                )
 
-        return {"quote_id": quote_id}
+        if email_id:
+            await assoc("emails", "deals", email_id, data["deal_id"], "email_to_deal")
+            await assoc("emails", "contacts", email_id, data["contact_id"], "email_to_contact")
+            if data.get("company_id"):
+                await assoc("emails", "companies", email_id, data["company_id"], "email_to_company")
+
+        return {"deal_id": data["deal_id"], "email_id": email_id}
