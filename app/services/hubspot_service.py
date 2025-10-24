@@ -214,3 +214,60 @@ async def create_transport_deal(data: dict):
             "contact_id": contact_id,
             "deal_id": deal_id,
         }
+
+async def send_quote_email(data: dict):
+    """
+    Creates a quote object and logs/sends the email via HubSpot.
+    """
+    async with aiohttp.ClientSession(headers=HEADERS) as session:
+        # 1️⃣ create quote (native "quotes" object)
+        quote_payload = {
+            "properties": {
+                "hs_title": f"Quote for deal {data['deal_id']}",
+                "hs_quote_amount": data["quote_amount"]
+            },
+            "associations": [
+                {
+                    "to": {"id": data["deal_id"]},
+                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 65}]
+                },
+                {
+                    "to": {"id": data["contact_id"]},
+                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 3}]
+                }
+            ]
+        }
+        async with session.post(f"{HUBSPOT_BASE_URL}/quotes", json=quote_payload) as res:
+            quote_text = await res.text()
+            logger.info(f"Quote create response: {res.status} {quote_text}")
+            quote_json = {}
+            try:
+                quote_json = await res.json()
+            except Exception:
+                pass
+            quote_id = quote_json.get("id")
+
+        # 2️⃣ log email engagement under  deal/contact/company
+        email_payload = {
+            "properties": {
+                "hs_email_direction": "OUTGOING",
+                "hs_email_subject": data["email_subject"],
+                "hs_email_text": data["email_body"]
+            },
+            "associations": [
+                {
+                    "to": {"id": data["deal_id"]},
+                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 65}]
+                },
+                {
+                    "to": {"id": data["contact_id"]},
+                    "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 3}]
+                }
+            ]
+        }
+
+        async with session.post("https://api.hubapi.com/crm/v3/objects/emails", json=email_payload) as res:
+            email_text = await res.text()
+            logger.info(f"Email log response: {res.status} {email_text}")
+
+        return {"quote_id": quote_id}

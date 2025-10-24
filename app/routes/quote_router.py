@@ -6,6 +6,8 @@ from app.models.email_response import EmailResponse
 from app.services.distance_service import get_distance_miles
 from app.core.logger import get_logger
 from app.services.hubspot_service import create_transport_deal
+from app.models.quote_email_request import QuoteEmailRequest
+from app.services.hubspot_service import send_quote_email
 import random
 
 quote_router = APIRouter(prefix="/quote", tags=["Quote"])
@@ -127,3 +129,13 @@ async def generate_email(payload: EmailRequest):
         f"First Source Auto"
     )
     return EmailResponse(subject=subject, body=body)
+
+@quote_router.post("/send-quote-email")
+async def send_quote_email_route(payload: QuoteEmailRequest):
+    """
+    Takes the deal/contact/company IDs, AI‑generated email,
+    and quote amount, creates the quote record, and logs/sends the email.
+    """
+    logger.info(f"Sending quote email for deal {payload.deal_id}")
+    result = await send_quote_email(payload.dict())
+    return {"status": "Email logged", "quote_id": result.get("quote_id")}
