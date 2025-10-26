@@ -10,7 +10,7 @@ logger = get_logger("hubspot_service")
 # -------------------------------------------------------------------
 # ONE correct base URL and token
 # -------------------------------------------------------------------
-HUBSPOT_BASE_URL = "https://api.hubapi.com/crm/v3/objects"
+HUBSPOT_BASE_URL = settings.HUBSPOT_BASE_URL
 HUBSPOT_TOKEN = settings.HUBSPOT_TOKEN
 HEADERS = {
     "Authorization": f"Bearer {HUBSPOT_TOKEN}",
@@ -108,7 +108,7 @@ from app.core.logger import get_logger
 
 logger = get_logger("hubspot_service")
 
-HUBSPOT_BASE_URL = "https://api.hubapi.com/crm/v3/objects"
+# HUBSPOT_BASE_URL = "https://api.hubapi.com/crm/v3/objects"
 HEADERS = {
     "Authorization": f"Bearer {HUBSPOT_TOKEN}",
     "Content-Type": "application/json"
@@ -135,7 +135,7 @@ async def create_transport_deal(data: dict):
         }
         contact_id = None
 
-        async with session.post(f"{HUBSPOT_BASE_URL}/contacts", json=contact_payload) as res:
+        async with session.post(f"{HUBSPOT_BASE_URL}/crm/v3/objects/contacts", json=contact_payload) as res:
             text = await res.text()
             logger.info(f"Contact response: {res.status} {text}")
             try:
@@ -181,7 +181,7 @@ async def create_transport_deal(data: dict):
         }
 
         deal_id = None
-        async with session.post(f"{HUBSPOT_BASE_URL}/deals", json=deal_payload) as res:
+        async with session.post(f"{HUBSPOT_BASE_URL}/crm/v3/objects/deals", json=deal_payload) as res:
             text = await res.text()
             logger.info(f"Deal response: {res.status} {text}")
             try:
@@ -248,13 +248,13 @@ async def send_quote_email(data: dict):
                 "quote_amount": data["quote_amount"]
             }
         }
-
+        logger.info(f"Updating deal {type(data['deal_id'])} with distance and quote amount {deal_payload}")
         async with session.patch(
-            f"{HUBSPOT_BASE_URL}/deals/{data['deal_id']}",
+            f"{HUBSPOT_BASE_URL}/crm/v3/objects/0-3/{data['deal_id']}",
             json=deal_payload,
         ) as res:
             deal_text = await res.text()
-            logger.info(f"Deal update response: {res.status} {deal_text}")
+            logger.info(f"Deal update response: {res.status} {res}")
 
         # ---------------------------------------------------------
         # 2️⃣ Create EMAIL engagement
@@ -268,11 +268,11 @@ async def send_quote_email(data: dict):
         }
 
         async with session.post(
-            "https://api.hubapi.com/crm/v3/objects/emails",
+            f"{HUBSPOT_BASE_URL}/crm/v3/objects/emails",
             json={"properties": email_props},
         ) as res:
             create_text = await res.text()
-            logger.info(f"Email create response: {res.status} {create_text}")
+            logger.info(f"Email create response: {res.status} {res}")
             try:
                 email_json = await res.json()
             except Exception:
