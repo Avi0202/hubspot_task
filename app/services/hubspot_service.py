@@ -84,7 +84,8 @@ async def get_company_details(company_name: str):
     if not company_name or len(company_name) < 3:
         logger.warning(f"Skipping HubSpot search for invalid company name: '{company_name}'")
         return []
-    endpoint = "/companies/search"
+
+    endpoint = "/crm/v3/objects/companies/search"
     payload = {
         "filterGroups": [{
             "filters": [{
@@ -93,8 +94,20 @@ async def get_company_details(company_name: str):
                 "value": company_name
             }]
         }],
-        "properties": ["name", "domain", "phone", "address"]
+        # ✅ Use HubSpot’s real property names instead of address_line1/address_line2
+        "properties": [
+            "name",
+            "domain",
+            "phone",
+            "address",      # Street Address (line 1)
+            "address2",     # Street Address 2
+            "city",
+            "state",
+            "zip",
+            "country"
+        ]
     }
+
     data = await hubspot_request("POST", endpoint, json=payload)
     return data.get("results", [])
 
@@ -245,16 +258,21 @@ async def send_quote_email(data: dict):
         deal_payload = {
             "properties": {
                 "distance_miles": data["distance_miles"],
-                "quote_amount": data["quote_amount"]
+                "quote_amount": data["quote_amount"],
+                "dealstage": "contractsent"  # Add the deal stage update
             }
         }
-        logger.info(f"Updating deal {type(data['deal_id'])} with distance and quote amount {deal_payload}")
+        
+        logger.info(
+            f"Updating deal {data['deal_id']} with distance, quote amount, and stage {deal_payload}"
+        )
+        
         async with session.patch(
-            f"{HUBSPOT_BASE_URL}/crm/v3/objects/0-3/{data['deal_id']}",
+            f"{HUBSPOT_BASE_URL}/crm/v3/objects/deals/{data['deal_id']}",
             json=deal_payload,
         ) as res:
             deal_text = await res.text()
-            logger.info(f"Deal update response: {res.status} {res}")
+            logger.info(f"Deal update response: {res.status} {deal_text}")
 
         # ---------------------------------------------------------
         # 2️⃣ Create EMAIL engagement

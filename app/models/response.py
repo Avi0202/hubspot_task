@@ -16,7 +16,12 @@ class CompanyDetailsResponse(BaseModel):
     name: Optional[str]
     domain: Optional[str]
     phone: Optional[str]
-    address: Optional[str] = None
+    address_line1: Optional[str] = None
+    address_line2: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+    country: Optional[str] = None
 
 class MessageResponse(BaseModel):
     message: str

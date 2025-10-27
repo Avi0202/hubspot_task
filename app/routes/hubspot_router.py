@@ -26,23 +26,23 @@ async def company_details(company_name: str):
     """
     if not company_name.strip():
         logger.warning("Empty company_name in request, skipping HubSpot call.")
-        return CompanyDetailsResponse(name=None, domain=None, phone=None, address=None)
+        return CompanyDetailsResponse()
 
     results = await get_company_details(company_name)
 
     if not results:
-        logger.info(f"No results found")
-        return {
-            "name": None,
-            "domain": None,
-            "phone": None,
-            "address": None
-        }
+        logger.info("No results found")
+        return CompanyDetailsResponse()
 
     props = results[0]["properties"]
     return CompanyDetailsResponse(
         name=props.get("name"),
         domain=props.get("domain"),
         phone=props.get("phone"),
-        address=props.get("address"),
+        address_line1=props.get("address_line1"),
+        address_line2=props.get("address_line2"),
+        city=props.get("city"),
+        state=props.get("state"),
+        zip_code=props.get("zip"),
+        country=props.get("country"),
     )
