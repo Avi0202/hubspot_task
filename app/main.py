@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from app.routes.hubspot_router import hub_router
 from app.routes.vin_router import vin_router
 from app.routes.location_router import location_router
@@ -40,6 +40,10 @@ async def health():
 async def root():
     return {"message": "server running fine"}
 
+@app.head("/")
+async def head_root():
+    # Respond properly to Render's HEAD / health check
+    return Response(status_code=200)
 
 app.include_router(hub_router)
 app.include_router(vin_router)
