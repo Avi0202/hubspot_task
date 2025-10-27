@@ -4,9 +4,7 @@ from typing import List, Optional
 class CompanyResponse(BaseModel):
     id: str
     name: Optional[str]
-    domain: Optional[str]
-    phone: Optional[str]
-    address: Optional[str] = None
+   
 
 class CompanyListResponse(BaseModel):
     count: int

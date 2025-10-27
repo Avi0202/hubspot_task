@@ -63,18 +63,16 @@ async def get_or_create_company(company_name: str, phone: str, address: dict):
     logger.info(f"Created company '{company_name}' with ID: {new_company['id']}")
     return new_company
 
-async def get_all_companies(limit: int = 10):
-    endpoint = "/companies"
-    params = {"limit": limit, "properties": "name,domain,phone,address"}
+async def get_all_companies(limit: int = 100):
+    endpoint = "/crm/v3/objects/companies"
+    params = {"limit": limit, "properties": "name"}
     data = await hubspot_request("GET", endpoint, params=params)
     results = data.get("results", [])
     return [
         CompanyResponse(
             id=company["id"],
             name=company["properties"].get("name"),
-            domain=company["properties"].get("domain"),
-            phone=company["properties"].get("phone"),
-            address=company["properties"].get("address"),
+            
         )
         for company in results
     ]
