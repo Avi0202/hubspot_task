@@ -38,7 +38,9 @@ app.middleware("http")(log_requests)
 async def root():
     return {"message": "server running fine"}
 
-
+@app.get("/health", include_in_schema=False)
+async def health():
+    return {"ok": True}
 
 app.include_router(hub_router)
 app.include_router(vin_router)
