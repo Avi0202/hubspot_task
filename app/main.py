@@ -28,7 +28,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 app.middleware("http")(log_requests)
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+@app.get("/")
+async def root():
+    return {"message": "server running fine"}
+
+
 app.include_router(hub_router)
 app.include_router(vin_router)
 app.include_router(location_router)
