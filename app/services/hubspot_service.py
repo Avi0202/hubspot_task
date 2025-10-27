@@ -170,6 +170,8 @@ async def create_transport_deal(data: dict):
         pickup = data.get("pickup", {}) or {}
         delivery = data.get("delivery", {}) or {}
         vehicles = data.get("vehicles", []) or []
+        vehicles_list = [f"{v['year']} {v['make']} {v['model']} ({v['type']})" for v in vehicles]
+        formatted_vehicles = "\n".join(vehicles_list)
 
         # 🔧 Compose deal name dynamically
         if vehicles:
@@ -187,7 +189,7 @@ async def create_transport_deal(data: dict):
                 "dealname": deal_name,
                 "pickup_city": pickup.get("city", ""),
                 "delivery_city": delivery.get("city", ""),
-                "vehicles_json": str(vehicles)
+                "vehicles_json": str(formatted_vehicles),
             }
         }
 
