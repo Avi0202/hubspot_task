@@ -10,7 +10,7 @@ logger = get_logger("hubspot_router")
 
 
 @hub_router.get("/companies", response_model=CompanyListResponse)
-async def list_companies(limit: int = Query(10, ge=1, le=100)):
+async def list_companies(limit: int = Query(100, ge=1, le=100)):
     """
     Returns a list of companies from HubSpot.
     """
