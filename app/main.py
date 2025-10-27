@@ -32,18 +32,13 @@ app.add_middleware(
 
 app.middleware("http")(log_requests)
 
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
+
 
 @app.get("/")
 async def root():
     return {"message": "server running fine"}
 
-@app.head("/")
-async def head_root():
-    # Respond properly to Render's HEAD / health check
-    return Response(status_code=200)
+
 
 app.include_router(hub_router)
 app.include_router(vin_router)
