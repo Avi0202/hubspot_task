@@ -262,13 +262,13 @@ async def send_quote_email(data: dict):
                 "dealstage": "contractsent"  # Add the deal stage update
             }
         }
-        
+
         logger.info(
             f"Updating deal {data['deal_id']} with distance, quote amount, and stage {deal_payload}"
         )
-        
+
         async with session.patch(
-            f"{HUBSPOT_BASE_URL}/crm/v3/objects/deals/{data['deal_id']}",
+            f"{HUBSPOT_BASE_URL}/crm/v3/objects/0-3/{data['deal_id']}",
             json=deal_payload,
         ) as res:
             deal_text = await res.text()
