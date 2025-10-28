@@ -2,8 +2,10 @@ from pydantic import BaseModel,Field
 from typing import Optional
 
 class CompanySearchRequest(BaseModel):
+    
     company_name: str
-
+class GetCompaniesRequest(BaseModel):
+    start_chars: str
 class CreateCompanyRequest(BaseModel):
     name: str
     domain: Optional[str] = None

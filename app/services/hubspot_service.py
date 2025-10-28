@@ -63,19 +63,20 @@ async def get_or_create_company(company_name: str, phone: str, address: dict):
     logger.info(f"Created company '{company_name}' with ID: {new_company['id']}")
     return new_company
 
-async def get_all_companies(limit: int = 100):
+async def get_all_companies(limit: int = 100, start_chars: str = None):
     endpoint = "/crm/v3/objects/companies"
     params = {"limit": limit, "properties": "name"}
     data = await hubspot_request("GET", endpoint, params=params)
     results = data.get("results", [])
     return [
-        CompanyResponse(
-            id=company["id"],
-            name=company["properties"].get("name"),
-            
-        )
-        for company in results
-    ]
+            CompanyResponse(
+                id=company["id"],
+                name=name,
+            )
+            for company in results
+            if (name := company["properties"].get("name"))  # skip if None
+            and (not start_chars or name.lower().startswith(start_chars.lower()))
+        ]
 
 async def get_company_details(company_name: str):
     company_name = (company_name or "").strip()
