@@ -259,7 +259,7 @@ async def send_quote_email(data: dict):
         deal_payload = {
             "properties": {
                 "distance_miles": data["distance_miles"],
-                "quote_amount": data["quote_amount"],
+                "amount": data['quote_amount'],
                 "dealstage": "contractsent"  # Add the deal stage update
             }
         }
