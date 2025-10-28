@@ -14,7 +14,7 @@ async def list_companies(limit: int = Query(100, ge=1, le=100), start_chars: str
     """
     Returns a list of companies from HubSpot.
     """
-    companies = await get_all_companies(limit, start_chars=start_chars)
+    companies = await get_all_companies(100, start_chars=start_chars)
     return CompanyListResponse(count=len(companies), companies=companies)
 
 
