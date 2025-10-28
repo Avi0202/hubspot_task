@@ -170,8 +170,11 @@ async def create_transport_deal(data: dict):
         # --------------------------------------------------------------
         pickup = data.get("pickup", {}) or {}
         delivery = data.get("delivery", {}) or {}
+        from_location = f"{pickup.get('city', '')}\n{pickup.get('state', '')}\n{pickup.get('zip', '')}"
+        to_location = f"{delivery.get('city', '')}\n{delivery.get('state', '')}\n{delivery.get('zip', '')}"
         vehicles = data.get("vehicles", []) or []
         vehicles_list = [f"{v['year']} {v['make']} {v['model']} ({v['type']})" for v in vehicles]
+        number_of_vehicles = len(vehicles_list)
         formatted_vehicles = "\n".join(vehicles_list)
 
         # 🔧 Compose deal name dynamically
@@ -180,17 +183,18 @@ async def create_transport_deal(data: dict):
             if len(vehicle_names) == 1:
                 vehicle_str = vehicle_names[0]
             else:
-                vehicle_str = ", ".join(vehicle_names[:-1]) + f" and {vehicle_names[-1]}"
-            deal_name = f"{data.get('contact_name')} Quote for {vehicle_str}"
+                vehicle_str = f"{number_of_vehicles} vehicles"
+            deal_name = f"Shipping {vehicle_str} from {pickup.get('city', '')} to {delivery.get('city', '')}"
         else:
             deal_name = f"{data.get('contact_name')} Quote"
 
         deal_payload = {
             "properties": {
                 "dealname": deal_name,
-                "pickup_city": pickup.get("city", ""),
-                "delivery_city": delivery.get("city", ""),
+                "from": from_location,
+                "to": to_location,
                 "vehicles_json": str(formatted_vehicles),
+                "number_of_vehicles": number_of_vehicles
             }
         }
 
