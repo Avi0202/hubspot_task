@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, HTTPException
 from app.models.quote_request import QuoteRequest
 from app.models.quote_response import QuoteResponse, RouteHistory
@@ -6,9 +7,12 @@ from app.models.email_response import EmailResponse
 from app.services.distance_service import get_distance_miles
 from app.core.logger import get_logger
 from app.services.hubspot_service import create_transport_deal,get_or_create_company
+from app.services.email_service import generate_email
 from app.models.quote_email_request import QuoteEmailRequest
 from app.services.hubspot_service import send_quote_email
 import random
+
+from app.services.implicit_company_service import enrich_company_data
 
 quote_router = APIRouter(prefix="/quote", tags=["Quote"])
 
@@ -16,6 +20,7 @@ logger = get_logger(__name__)
 
 @quote_router.post("/generate", response_model=QuoteResponse)
 async def generate_quote(payload: QuoteRequest):
+    
     deal_data = {
         "company_name": getattr(payload, "company_name", "").strip() or "Individual Customer",
         "contact_name": payload.contact_name,
@@ -42,6 +47,8 @@ async def generate_quote(payload: QuoteRequest):
     # ✅ ensure company exists and attach ID
     company = await get_or_create_company(company_name, phone, address)
     company_id = company["id"]
+    asyncio.create_task(enrich_company_data(company_id, company_name))
+    logger.info(f"Started enrichment task for company {company_name}")
     deal_data["company_id"] = company_id  # ✅ pass company id forward
 
     logger.info("Calling transport deal creation in HubSpot")
@@ -107,40 +114,18 @@ async def generate_quote(payload: QuoteRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @quote_router.post("/generate-email", response_model=EmailResponse)
-async def generate_email(payload: EmailRequest):
-    """
-    Generates a personalized transport quote email using provided details.
-    """
-    name = payload.contact_name
-    # Format vehicle list nicely
-    vehicles = [f"{v.year} {v.make} {v.model}" for v in payload.vehicles]
-    if len(vehicles) == 1:
-        vehicle_text = vehicles[0]
-    else:
-        vehicle_text = ", ".join(vehicles[:-1]) + f" and {vehicles[-1]}"
+async def generate(payload: EmailRequest):
+    
+    email_data = await generate_email(payload)
+    # logger.info(f"Generated email data: {email_data}")
 
-    pickup = f"{payload.pickup_city}, {payload.pickup_state}"
-    delivery = f"{payload.delivery_city}, {payload.delivery_state}"
-    amount = f"${payload.final_quote_amount:,.0f}"
-
-    subject = f"Auto Transport Quote - {pickup} to {delivery}"
-
-    body = (
-        f"Hi {name},\n\n"
-        f"Thank you for your inquiry about shipping your {vehicle_text} "
-        f"from {pickup} to {delivery}.\n\n"
-        f"I'm pleased to provide you with a quote of {amount} for this transport. "
-        f"This includes:\n\n"
-        f"• Full insurance coverage during transport\n"
-        f"• Door-to-door service\n"
-        f"• Real-time tracking updates\n"
-        f"• Estimated delivery within 3-5 business days\n\n"
-        f"Our team has successfully completed similar routes recently with excellent customer satisfaction. "
-        f"If you'd like to proceed or have any questions, please don't hesitate to reach out.\n\n"
-        f"Best regards,\n"
-        f"Ethan Valentine\n"
-        f"First Source Auto"
-    )
+    # FIXED: access attributes directly instead of .get()
+    subject = email_data.get("subject") or "Your Vehicle Shipping Quote"
+    body = email_data.get("body") or (
+    "Dear Customer,\n\nThank you for requesting a vehicle shipping quote. "
+    "We will get back to you shortly with the details.\n\nBest regards,\nVehicle Shipping Team"
+)
+    # logger.info(f"Final email subject:{body} {subject}")
     return EmailResponse(subject=subject, body=body)
 
 @quote_router.post("/send-quote-email")

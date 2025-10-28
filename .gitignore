@@ -5,3 +5,5 @@ __pycache__/
 logs/
 .DS_Store
 test.py
+Orders_Data_Clean.csv
+Orders_Master.csv

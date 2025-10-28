@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     VIN_API: str
     ZIPPO_BASE_URL: str = "https://api.zippopotam.us/us"
     OPENROUTESERVICE_API_KEY: str
+    OPENROUTESERVICE_BASE_URL: str
+    COMPANY_DETAIL_EXTRACTOR_URL: str
+    EMAIL_GENERATION_URL: str
 
     class Config:
         env_file = ".env"
