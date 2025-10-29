@@ -7,3 +7,5 @@ logs/
 test.py
 Orders_Data_Clean.csv
 Orders_Master.csv
+data_clean.ipynb
+.ipynb_checkpoints/

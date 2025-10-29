@@ -1,56 +1,47 @@
 from fastapi import APIRouter, HTTPException
-import httpx, json
-from app.core.config import settings
+import httpx
 from app.core.logger import get_logger
 from app.models.request import DecodeVinRequest
 from app.models.response import DecodeVinResponse
 
 vin_router = APIRouter(prefix="/vin", tags=["Vehicle"])
-
 logger = get_logger(__name__)
 
 @vin_router.post("/details", response_model=DecodeVinResponse)
 async def decode_vin(request: DecodeVinRequest):
-    url = settings.VIN_API_URL
-    headers = {
-        "Authorization": f"Bearer {settings.VIN_API}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "session_id": "1761024240367",
-        "message": request.vin,
-        "agent_id": "68d64fb8a2356c3108a44e44"
-    }
+    vin = request.vin.strip().upper()
+    url = f"https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/{vin}?format=json"
 
-    # Make API call
-    logger.info(f"Making API call to VIN service for VIN: {request.vin}")
+    logger.info(f"Calling NHTSA API for VIN: {vin}")
     try:
-        async with httpx.AsyncClient(timeout=300.0) as client:
-            response = await client.post(url, headers=headers, json=payload)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url)
     except httpx.ReadTimeout:
-        raise HTTPException(status_code=504, detail="VIN API request timed out")
+        raise HTTPException(status_code=504, detail="NHTSA VIN API request timed out")
     except httpx.RequestError as e:
-        raise HTTPException(status_code=503, detail=f"VIN API request failed: {str(e)}")
+        raise HTTPException(status_code=503, detail=f"NHTSA VIN API request failed: {str(e)}")
 
     if not response.is_success:
-        raise HTTPException(status_code=response.status_code, detail="VIN API request failed")
+        raise HTTPException(status_code=response.status_code, detail="NHTSA VIN API request failed")
 
-    # Parse data
     data = response.json()
 
     try:
-        inner = json.loads(data["text"])
-    except Exception:
-        raise HTTPException(status_code=500, detail="Invalid inner JSON structure")
+        results = data["Results"][0]  # results is a list with one dict
+    except (KeyError, IndexError):
+        raise HTTPException(status_code=500, detail="Unexpected NHTSA API response structure")
 
-    if inner.get("status") != "success":
-        raise HTTPException(status_code=400, detail=inner.get("error_message", "VIN lookup failed"))
-
-    vehicle = inner.get("vehicle", {})
+    # Extract the required fields
+    vehicle = {
+        "year": results.get("ModelYear"),
+        "make": results.get("Make"),
+        "model": results.get("Model"),
+        "type": results.get("BodyClass", "Unknown")
+    }
 
     return DecodeVinResponse(
-        year=vehicle.get("year"),
-        make=vehicle.get("make"),
-        model=vehicle.get("model"),
-        type=vehicle.get("body_style", "Unknown")
+        year=vehicle["year"],
+        make=vehicle["make"],
+        model=vehicle["model"],
+        type=vehicle["type"]
     )
